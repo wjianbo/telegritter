@@ -65,17 +65,26 @@ class Tweet:
 class Twitter:
     """An interface to Twitter."""
 
-    AUTH_KEYS = ("api_key", "api_secret_key", "access_token", "access_token_secret")
+    AUTH_KEYS = ("api_key", "api_secret_key",
+                 "access_token", "access_token_secret")
 
     def __init__(self, auth_info):
-        auth = tweepy.OAuthHandler(auth_info['api_key'], auth_info['api_secret_key'])
-        auth.set_access_token(auth_info['access_token'], auth_info['access_token_secret'])
+        auth = tweepy.OAuthHandler(
+            auth_info['api_key'], auth_info['api_secret_key'])
+        auth.set_access_token(
+            auth_info['access_token'], auth_info['access_token_secret'])
         self.api = tweepy.API(auth)
+        self.client = tweepy.Client(
+            consumer_key=auth_info['api_key'],
+            consumer_secret=auth_info['api_secret_key'],
+            access_token=auth_info['access_token'],
+            access_token_secret=auth_info['access_token_secret']
+        )
 
     def update(self, text):
         """Send message to Twitter."""
         # FIXME(5): run in a thread!!!
-        resp = self.api.update_status(text)
+        resp = self.client.create_tweet(text=text)
         print("========= twitter update:", resp)
 
     async def get(self):
