@@ -17,7 +17,9 @@
 import json
 import logging
 from datetime import datetime
+import os
 from urllib import parse
+import uuid
 
 import aiohttp
 
@@ -70,13 +72,13 @@ class Message:
             info = dict(text=text)
 
         # FIXME(7): reuse, maybe, for images
-        # elif 'photo' in msg:
-        #     # grab the content of the biggest photo only
-        #     photo = max(msg['photo'], key=lambda photo: photo['width'])
-        #     extfile_path = await download_file(photo['file_id'])
-        #     media_type = cls.MEDIA_TYPE_IMAGE
-        #     text = msg['caption'] if 'caption' in msg else None
-        #     info = dict(extfile_path=extfile_path, media_type=media_type, text=text)
+        elif 'photo' in msg:
+            # grab the content of the biggest photo only
+            photo = max(msg['photo'], key=lambda photo: photo['width'])
+            extfile_path = await download_file(photo['file_id'])
+            media_type = cls.MEDIA_TYPE_IMAGE
+            text = msg['caption'] if 'caption' in msg else None
+            info = dict(extfile_path=extfile_path, media_type=media_type, text=text)
 
         # FIXME(8): reuse, maybe, for real files (?)
         # elif 'voice' in msg:
@@ -114,42 +116,65 @@ class Message:
 
 
 # FIXME(7): reuse this in a future when we support receiving images from telegram
-# API_FILE = "https://api.telegram.org/file/bot{token}/{file_path}"
-# def build_fileapi_url(file_path):
-#     """Build the proper url to hit the API."""
-#     token = config.BOT_AUTH_TOKEN
-#     url = API_FILE.format(token=token, file_path=file_path)
-#     return url
+API_FILE = "https://api.telegram.org/file/bot{token}/{file_path}"
+def build_fileapi_url(file_path):
+    """Build the proper url to hit the API."""
+    token = config.BOT_AUTH_TOKEN
+    url = API_FILE.format(token=token, file_path=file_path)
+    return url
 
 
 # FIXME(8): reuse this in the future when we need real files
 # @defer.inline_callbacks
-# def download_file(file_id):
-#     """Download the file content from Telegram."""
-#     url = build_baseapi_url('getFile', file_id=file_id)
-#     logger.debug("Getting file path, file_id=%s", file_id)
-#     downloader = _Downloader(url)
-#     encoded_data = yield downloader.deferred
-#
-#     logger.debug("getFile response encoded data len=%d", len(encoded_data))
-#     data = json.loads(encoded_data.decode('utf8'))
-#     if not data.get('ok'):
-#         logger.warning("getFile result is not ok: %s", encoded_data)
-#         return
-#
-#     remote_path = data['result']['file_path']
-#     url = build_fileapi_url(remote_path)
-#    file_path = os.path.join(data_basedir, uuid.uuid4().hex + '-' + os.path.basename(remote_path))
-#     logger.debug("Getting file content, storing in %r", file_path)
-#     downloader = _Downloader(url, file_path)
-#     downloaded_size = yield downloader.deferred
-#
-#     logger.debug("Downloaded file content, size=%d", downloaded_size)
-#     defer.return_value(file_path)
+async def download_file(file_id):
+    """Download the file content from Telegram."""
+    url = build_baseapi_url('getFile', file_id=file_id)
+    logger.debug("Getting file path, file_id=%s", file_id)
+    session = aiohttp.ClientSession()
+    async with session.get(url) as resp:
+        raw_data = await resp.text()
+    data = json.loads(raw_data)
+
+    if not data.get('ok'):
+        logger.warning("getFile result is not ok: %s", raw_data)
+        return
+
+    remote_path = data['result']['file_path']
+    url = build_fileapi_url(remote_path)
+    file_path = os.path.join(uuid.uuid4().hex + '-' + os.path.basename(remote_path))
+    logger.debug("Getting file content, storing in %r", file_path)
+    await download(url, file_path)
+    return file_path
+
+async def download(url, destination):
+    """
+    Downloads a file from the specified URL and saves it to the given destination.
+
+    :param url: The URL of the file to download.
+    :param destination: The local file path where the downloaded file will be saved.
+    """
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                with open(destination, 'wb') as file:
+                    while True:
+                        chunk = await response.content.read(1024)
+                        if not chunk:
+                            break
+                        file.write(chunk)
+                print(f"Downloaded file to {destination}")
+            else:
+                print(f"Failed to download file. Status code: {response.status}")
 
 
 API_BASE = "https://api.telegram.org/bot{token}/{method}"
-
+def build_baseapi_url(method, **kwargs):
+    """Build the proper url to hit the API."""
+    token = config.BOT_AUTH_TOKEN
+    url = API_BASE.format(token=token, method=method)
+    if kwargs:
+        url += '?' + parse.urlencode(kwargs)
+    return url
 
 class Telegram:
     """An interface to Telegram."""
@@ -159,6 +184,8 @@ class Telegram:
     def __init__(self, auth_info):
         self.token = auth_info['token']
         self.session = aiohttp.ClientSession()
+        config.BOT_AUTH_TOKEN = self.token
+        config.save()
 
     def _build_get_url(self, method, **kwargs):
         """Build the proper url to hit the API with a GET."""
@@ -235,4 +262,4 @@ class Telegram:
         messages = await self.get()
         for message in messages:
             logger.debug("Poller got message: %s", message)
-            twitter.update(message.text)
+            twitter.update(message)

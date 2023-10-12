@@ -34,6 +34,7 @@ class _Config:
         'USER_ALLOWED': None,
         'POLLER_DELAY': 10,
         'TWITTER_LAST_ID': None,
+        'BOT_AUTH_TOKEN': None
     }
 
     def __init__(self):

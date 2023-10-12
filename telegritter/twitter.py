@@ -18,6 +18,7 @@ import asyncio
 import logging
 
 import tweepy
+from telegram import Message
 
 from telegritter.config import config
 
@@ -81,10 +82,15 @@ class Twitter:
             access_token_secret=auth_info['access_token_secret']
         )
 
-    def update(self, text):
+    def update(self, message):
         """Send message to Twitter."""
         # FIXME(5): run in a thread!!!
-        resp = self.client.create_tweet(text=text)
+        if message.media_type is Message.MEDIA_TYPE_IMAGE:
+            image_path = message.extfile_path
+            media = self.api.media_upload(filename=image_path)
+            resp = self.client.create_tweet(text=message.text, media_ids=[media.media_id])
+        else:
+            resp = self.client.create_tweet(text=message.text)
         print("========= twitter update:", resp)
 
     async def get(self):
