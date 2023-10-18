@@ -69,6 +69,8 @@ class Message:
 
         if 'text' in msg:
             text = msg['text']
+            if len(text) > 140:
+                text = f"{text[:100]}... https://t.me/{from_id}/{msg['message_id']}"
             info = dict(text=text)
 
         # FIXME(7): reuse, maybe, for images
