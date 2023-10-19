@@ -66,9 +66,10 @@ async def _run(runner, other, with_init_delay):
         await asyncio.sleep(config.POLLER_DELAY)
 
 
-async def main(twitter, telegram):
+async def main(twitter, telegram, gmail):
     """Main entry point."""
     await asyncio.gather(
         _run(telegram, twitter, with_init_delay=False),
-        _run(twitter, telegram, with_init_delay=True),
+        _run(gmail, None, with_init_delay=False),
+        # _run(twitter, telegram, with_init_delay=True),
     )
